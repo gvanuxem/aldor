@@ -25,7 +25,7 @@ include $(top_builddir)/lib/config.mk
 include $(top_srcdir)/mk/step.mk
 include $(top_srcdir)/mk/topsort.mk
 
-STEPS := ALDOR AO2C AO2FM AR DEP FOAMJ JAR JAR JAVAC SRCJAR
+STEPS := ALDOR AO2C AO2FM AR DEP FOAMJ JAR JAR JAVAC SRCJAR LISP
 QUIET_STEPS := ALDORTEST ALDORTESTJ ALDORTESTEXE
 
 $(call am_define_steps, $(STEPS))
@@ -182,13 +182,23 @@ ifeq ($(bytecode_only),)
 all: $(addsuffix .c,$(library))
 endif
 
+ifneq ($(BUILD_LISP),)
+.PHONY: all-lsp
+all-lsp: $(patsubst %,%.lsp,$(lisplibrary))
+$(patsubst %,%.lsp,$(lisplibrary)): %.lsp: %.ao
+	$(AM_V_LISP) \
+	$(aldorexedir)/aldor $(aldor_common_args) $($*_lopts) -Flsp $*.ao
+
+all: all-lsp
+endif
+
 ifneq ($(BUILD_JAVA),)
 ifneq ($(javalibrary),)
 _javalibrary = $(call topsort_list, $(filter-out $(java_blacklist), $(javalibrary)))
 
 $(patsubst %,aldorcode/%.java, $(_javalibrary)): aldorcode/%.java: %.ao
 	$(AM_V_FOAMJ)$(AM_DBG)	\
-	$(aldorexedir)/aldor $(aldor_common_args) -Fjava $*.ao
+	$(aldorexedir)/aldor $(aldor_common_args) $($*_jopts) -Fjava $*.ao
 
 $(patsubst %,aldorcode/%.class, $(_javalibrary)): aldorcode/%.class: $(libraryname).classlib
 # FIXME: -g here is ropey
@@ -218,12 +228,20 @@ $(libraryname)-sources.jar: $(patsubst %,aldorcode/%.java, $(_javalibrary)) $(to
 		jar uf ../$@ -C sources-jar .; done;				\
 	rm -rf sources-jar
 
-all: $(libraryname)-sources.jar $(libraryname).jar
+all: $(libraryname)-sources.jar $(libraryname).jar \
+	$(patsubst %,aldorcode/%.class,$(_javalibrary))
+
+.PHONY: $(patsubst %, java-%, $(_javalibrary))
+$(patsubst %, java-%, $(_javalibrary)): java-%: aldorcode/%.class
 
 endif
 endif
 
+ifneq ($(WITH_INTERP_TESTS),)
 aldorinterptests := $(patsubst %,%-aldortest-exec-interp,$(filter-out $(interp_test_blacklist), library))
+else
+aldorinterptests :=
+endif
 
 $(aldorinterptests): %-aldortest-exec-interp: Makefile
 	$(AM_V_ALDORTEST) \
@@ -291,11 +309,11 @@ $(aldortestjavas): %-aldortest-exec-java: Makefile %.as
 	 $(AM_DBG) $(aldorexedir)/aldor $(aldor_common_args) -Y$(aldorlibdir)/libfoam/al \
 		-Y$(foamdir) -Y$(foamlibdir) -l$(libraryname) $(patsubst %,-l%,$(librarydeps)) \
 		-I$(top_srcdir)/lib/aldor/include -Y$(top_builddir)/lib/aldor/src \
-	-Y$(librarylibdir) -I$(libraryincdir) -DALDORTEST $$(cat $*_jtest.as | grep ^aldoroptions: | sed -e 's/aldoroptions://') \
+		-Y$(librarylibdir) -I$(libraryincdir) -DALDORTEST $$(cat $*_jtest.as | grep ^aldoroptions: | sed -e 's/aldoroptions://') \
 		-Fjava -Ffm -Jmain \
 		$($*_test_AXLFLAGS) \
-		$*_jtest.as; \
-	 javac -g -cp $(aldorlibdir)/java/src/foamj.jar aldorcode/$*_jtest.java; \
+		$*_jtest.as && \
+	 javac -g -cp $(aldorlibdir)/java/src/foamj.jar aldorcode/$*_jtest.java && \
 	 java -cp .:$(aldorlibdir)/java/src/foamj.jar:$(aldorlibdir)/libfoam/al/foam.jar:$(libclasspath) aldorcode.$*_jtest; \
 	 $(CHECK_TEST_STATUS) \
 	 fi;)
@@ -359,6 +377,7 @@ EMPTY_AUTOMAKE_TARGETS += install-exec uninstall
 EMPTY_AUTOMAKE_TARGETS += install-dvi install-html install-info install-ps install-pdf
 EMPTY_AUTOMAKE_TARGETS += installdirs
 EMPTY_AUTOMAKE_TARGETS += check installcheck
+EMPTY_AUTOMAKE_TARGETS += releasecheck
 
 .PHONY: $(EMPTY_AUTOMAKE_TARGETS)
 $(EMPTY_AUTOMAKE_TARGETS):
