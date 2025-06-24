@@ -3,6 +3,7 @@ Section: devel
 Priority: extra
 Maintainer: Pippijn van Steenhoven <pippijn@xinutec.org>
 Build-Depends:
+ build-essential:native,
  debhelper (>= 8.0.0),
  autotools-dev,
  automake,
