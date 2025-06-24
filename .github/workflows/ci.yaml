@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: install dependencies
-      run: sudo apt-get install libgmp-dev debhelper fakeroot
+      run: sudo apt-get install libgmp-dev debhelper fakeroot build-essential:native
     - name: build
       run: dpkg-buildpackage -b -us -uc
 
